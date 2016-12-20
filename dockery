@@ -1,0 +1,88 @@
+#!/bin/bash
+
+if [ -z "$1" ] || [ "$1" == "-h" ]
+	then
+		echo "";
+		echo "                            DOCKERY";
+		echo "About: Helper functions for working with docker on OSX.";
+		echo "To use, simply run dockery <command> from the root directory of a project using docker.";
+		echo "";
+		echo "dockery  <command>";
+        echo -e "";
+		echo -e "Commands:\n";
+        echo -e "    mysql-port\tCopy the mysql port to clipboard and open Sequel Pro if installed.";
+        echo -e "    redis-clear\tKill, create, then start fresh Redis containers.";
+        echo -e "    swag\tStart swaggerui containers and open page in Chrome.";
+        echo -e "    ssh\t\tSelect from a list of active containers to \"ssh\" into.";
+		exit 1
+fi
+
+args=$@
+args=$(echo $@ | sed 's/\-\-verbose//g; s/\-v//g')
+CMD="${1}"
+CURDIR="${PWD//\ /\\ }/"
+
+##################################
+
+function is_docker {
+    local check;
+    check=$(docker ps) 2>1 || echo "Try running open -a /Applications/Docker.app";
+}
+
+##
+# Same great taste, fewer calories.
+##
+function mysql-port {
+  if ! is_docker; then
+    return;
+  fi
+
+  port=$(docker-compose ps | grep mysql | head -1 | cut -d ':' -f2 | cut -d '-' -f1 | sed 's/ //g; s/mysqld//g' | tr -d '\n');
+  echo "Docker mysql port: ${port}";
+  echo ${port} | tr -d '\n' | pbcopy;
+  echo "Copied to clipboard.";
+  echo "Opening Sequel Pro..";
+  open -a /Applications/Sequel\ Pro.app;
+}
+
+function redis-clear {
+  if ! is_docker; then
+    return;
+  fi
+
+  CONTAINER_IDS=$(docker ps | grep redis | cut -d ' ' -f1);
+  for ID in $CONTAINER_IDS; do
+    docker kill ${ID};
+  done;
+
+  if [ -f "${PWD}/bin/dev.sh" ]; then
+    ./bin/dev.sh;
+  else
+    docker-compose up -d;
+  fi
+}
+
+function swag {
+  if ! is_docker; then
+    return;
+  fi
+
+  docker kill ${id}; docker-compose up -d swaggerui && open -a /Applications/Google\ Chrome.app http://localhost:9999;
+}
+
+function ssh {
+  if ! is_docker; then
+    return;
+  fi
+
+  dhosts=($(docker-compose ps | tail -n +3 | cut -d ' ' -f1 | tr -s [:space:]));
+
+  for index in ${!dhosts[@]};do
+    echo "[${index}] ${dhosts[${index}]}";
+  done;
+
+  read -e -p "Enter number for host to connect to: " selected_host;
+  docker exec -it ${dhosts[${selected_host}]} bash;
+}
+
+${CMD};
